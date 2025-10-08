@@ -30,14 +30,22 @@ from agents.cost import breakdown
 from agents.graph import invoke_graph
 from apps.ui.components import highlight_citations, pill, replay, request_card, source_card
 
-RISK_COLOUR = {"low": "#0f9d58", "medium": "#e8a33d", "high": "#d93025"}
+# Kitchen-pass palette, matching .streamlit/config.toml. Every colour here is
+# used as text on the paper background as well as a tint, so each one clears
+# 4.5:1 contrast against #FBF7F1.
+HERB = "#2F6B3A"
+SAFFRON = "#8A5A00"
+PAPRIKA = "#B4441E"
+CHILLI = "#A4161A"
+SLATE = "#5B534C"
+RISK_COLOUR = {"low": HERB, "medium": SAFFRON, "high": CHILLI}
 STATUS_COLOUR = {
-    "pending": "#e8a33d",
-    "executed": "#0f9d58",
-    "rejected": "#5f6368",
-    "expired": "#8b6f47",
-    "failed": "#d93025",
-    "approving": "#1a73e8",
+    "pending": SAFFRON,
+    "executed": HERB,
+    "rejected": SLATE,
+    "expired": "#6F5536",
+    "failed": CHILLI,
+    "approving": PAPRIKA,
 }
 
 
@@ -45,12 +53,14 @@ STATUS_COLOUR = {
 # Presentation helpers
 # --------------------------------------------------------------------------
 def meter(label: str, value: float, caption: str = "") -> None:
-    colour = "#0f9d58" if value >= 0.7 else "#e8a33d" if value >= 0.45 else "#d93025"
+    colour = HERB if value >= 0.7 else SAFFRON if value >= 0.45 else CHILLI
     st.markdown(
         f"<div style='margin-bottom:6px;'>"
-        f"<div style='display:flex;justify-content:space-between;font-size:0.8rem;color:#5f6368;'>"
+        f"<div style='display:flex;justify-content:space-between;font-size:0.8rem;color:{SLATE};'>"
         f"<span>{escape(label)}</span><span style='color:{colour};font-weight:600;'>{value:.0%}</span></div>"
-        f"<div style='background:#00000014;border-radius:999px;height:6px;overflow:hidden;'>"
+        f"<div role='meter' aria-label='{escape(label)}' aria-valuemin='0' aria-valuemax='100' "
+        f"aria-valuenow='{value * 100:.0f}' "
+        f"style='background:#2B262214;border-radius:999px;height:6px;overflow:hidden;'>"
         f"<div style='background:{colour};width:{max(0.0, min(1.0, value)) * 100:.1f}%;height:6px;'></div>"
         f"</div></div>",
         unsafe_allow_html=True,
@@ -62,35 +72,48 @@ def meter(label: str, value: float, caption: str = "") -> None:
 # --------------------------------------------------------------------------
 # Page
 # --------------------------------------------------------------------------
-st.set_page_config(page_title="Ops Copilot — Knowledge & Actions", layout="wide", page_icon="🛡️")
+st.set_page_config(page_title="Ops Copilot", layout="wide", page_icon=":material/restaurant:")
 
 st.markdown(
     """
     <style>
-      .block-container {padding-top: 2.2rem; padding-bottom: 3rem;}
+      .block-container {padding-top: 3.4rem; padding-bottom: 3rem;}
       div[data-testid="stMetricValue"] {font-size: 1.35rem;}
-      .panel {border:1px solid rgba(128,128,128,.25); border-radius:12px; padding:14px 16px; margin-bottom:12px;}
-      .panel-title {font-size:.78rem; text-transform:uppercase; letter-spacing:.06em;
-                    color:#5f6368; font-weight:700; margin-bottom:8px;}
-      .src {border-left:3px solid #1a73e8; padding:4px 0 4px 10px; margin-bottom:10px;}
+      .masthead {border-bottom: 2px solid #2B2622; padding-bottom: .6rem; margin-bottom: 1rem;}
+      .masthead .eyebrow {font-size:.72rem; letter-spacing:.14em; text-transform:uppercase;
+                          color:#B4441E; font-weight:700;}
+      .masthead h1 {font-size: 2rem; margin: .1rem 0 .2rem; padding: 0;}
+      .masthead p {color:#5B534C; font-size:.92rem; margin:0; max-width: 62rem;}
+      .panel {background:#FFFDF9; border:1px solid #E3D8C9; border-radius:8px; padding:14px 16px; margin-bottom:12px;}
+      .panel-title {font-size:.74rem; text-transform:uppercase; letter-spacing:.1em;
+                    color:#5B534C; font-weight:700; margin: 1.1rem 0 .5rem;
+                    border-top: 1px dashed #D6C8B5; padding-top: .7rem;}
+      .src {border-left:3px solid #D99A1E; padding:4px 0 4px 10px; margin-bottom:10px;}
       .src-head {font-weight:600; font-size:.86rem;}
-      .src-body {font-size:.82rem; color:#5f6368; line-height:1.45;}
-      .muted {color:#5f6368; font-size:.8rem; font-weight:400;}
-      .request-summary {font-size:.95rem; font-weight:600; margin-bottom:6px;}
-      .cite {background:#1a73e81f; color:#1a73e8; border-radius:4px; padding:0 5px;
-             font-size:.85em; font-weight:600; white-space:nowrap;}
-      .log {font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.76rem;
-            color:#3c4043; padding:3px 0;}
+      .src-body {font-size:.82rem; color:#5B534C; line-height:1.5;}
+      .muted {color:#5B534C; font-size:.8rem; font-weight:400;}
+      .request-summary {font-family:"Source Serif 4", Georgia, serif; font-size:1.05rem;
+                        font-weight:600; margin-bottom:6px;}
+      .cite {background:#B4441E14; color:#9A3412; border:1px solid #B4441E33; border-radius:4px;
+             padding:0 5px; font-size:.85em; font-weight:600; white-space:nowrap;}
+      .log {font-family:"IBM Plex Mono", ui-monospace, Menlo, monospace; font-size:.76rem;
+            color:#3A332E; padding:3px 0;}
+      @media (max-width: 640px) {
+        .masthead h1 {font-size: 1.55rem;}
+        .block-container {padding-left: 1rem; padding-right: 1rem;}
+      }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.markdown("## 🛡️ Ops Copilot — Knowledge & Actions")
-st.caption(
-    "Retrieval-augmented answers over internal operations PDFs, with a human-approval gate "
-    "in front of every operational change. Retrieved document text is treated as untrusted data "
-    "and can never select an action."
+st.markdown(
+    "<header class='masthead'><div class='eyebrow'>Restaurant operations</div>"
+    "<h1>Ops Copilot</h1>"
+    "<p>Answers from the internal operations manuals, with citations. Menu and hours changes "
+    "are proposed, never made: each one waits for a person to approve it, and text from the "
+    "manuals can never choose an action.</p></header>",
+    unsafe_allow_html=True,
 )
 
 gate = get_gate()
@@ -113,9 +136,9 @@ with st.sidebar:
     st.caption("A closed allow-list. Anything not listed here cannot be proposed or approved.")
     for row in registry_rows():
         st.markdown(
-            f"{pill(row['risk'], RISK_COLOUR.get(row['risk'], '#5f6368'))} "
+            f"{pill(row['risk'], RISK_COLOUR.get(row['risk'], SLATE))} "
             f"**{escape(row['action'])}** &nbsp;<code>{escape(row['endpoint'])}</code><br>"
-            f"<span style='font-size:.78rem;color:#5f6368;'>{escape(row['description'])}</span>",
+            f"<span class='muted'>{escape(row['description'])}</span>",
             unsafe_allow_html=True,
         )
 
@@ -130,13 +153,14 @@ with st.sidebar:
 # ---- Input ----
 prompt = st.chat_input("Ask about finance, menu, onboarding or platforms — or issue a command such as: pause 'Chicken Biryani'")
 if prompt:
-    result = invoke_graph(
-        query=prompt,
-        top_k=top_k,
-        style=style,
-        temperature=temperature,
-        operator=config.OPERATOR_NAME,
-    )
+    with st.spinner("Searching the operations manuals…"):
+        result = invoke_graph(
+            query=prompt,
+            top_k=top_k,
+            style=style,
+            temperature=temperature,
+            operator=config.OPERATOR_NAME,
+        )
     st.session_state.history.append({"role": "user", "content": prompt})
     st.session_state.history.append({"role": "assistant", "content": result.get("answer", "")})
     st.session_state.last_result = result
@@ -159,7 +183,7 @@ with left:
     if not st.session_state.history:
         st.info(
             "**Try:** *When are partner payments issued and how are statements summarised?* — "
-            "or a command: *pause 'Chicken Biryani'*, which stops at the approval gate on the right."
+            "or a command: *pause 'Chicken Biryani'*, which stops at the human-approval gate."
         )
     for index, message in enumerate(st.session_state.history):
         with st.chat_message(message["role"]):
@@ -178,6 +202,13 @@ with left:
             else:
                 st.markdown(message["content"])
 
+    retrieval_error = (result.get("retrieval") or {}).get("error")
+    if retrieval_error:
+        st.warning(
+            f"The document index could not be searched ({retrieval_error}), so this answer has no sources. "
+            "Build it with `python -m ingestion.build_index`, or restart the compose stack.",
+        )
+
     if contexts:
         st.markdown("<div class='panel-title'>Retrieved sources</div>", unsafe_allow_html=True)
         cited = set(report.get("cited_sources", []))
@@ -185,7 +216,7 @@ with left:
             source = context.get("source", "unknown")
             similarity = context.get("similarity")
             similarity_text = f"{similarity:.0%} similar" if isinstance(similarity, int | float) else "n/a"
-            badge = pill("cited", "#0f9d58") if source.lower() in cited else pill("retrieved", "#5f6368")
+            badge = pill("cited", HERB) if source.lower() in cited else pill("retrieved", SLATE)
             body = (context.get("document") or "")[:340]
             st.markdown(source_card(position, source, badge, similarity_text, body), unsafe_allow_html=True)
 
@@ -196,14 +227,14 @@ with right:
 
     if request is None:
         st.markdown(
-            "<div class='panel'><span style='color:#5f6368;font-size:.85rem;'>"
+            "<div class='panel'><span style='color:#5B534C;font-size:.85rem;'>"
             "No action proposed. Knowledge questions never reach this gate — only a command "
             "the operator typed can, and it stops here."
             "</span></div>",
             unsafe_allow_html=True,
         )
     else:
-        colour = STATUS_COLOUR.get(request.status.value, "#5f6368")
+        colour = STATUS_COLOUR.get(request.status.value, SLATE)
         remaining = request.seconds_remaining()
         # Past tense once the decision is made: "will be sent" on an executed
         # action reads as though something is still pending.
@@ -216,7 +247,7 @@ with right:
         st.markdown(
             request_card(
                 status_pill=pill(request.status.value.upper(), colour),
-                risk_pill=pill(f"{request.risk.value} risk", RISK_COLOUR.get(request.risk.value, "#5f6368")),
+                risk_pill=pill(f"{request.risk.value} risk", RISK_COLOUR.get(request.risk.value, SLATE)),
                 request_id=request.id,
                 summary=request.summary,
                 requested_by=request.requested_by,
@@ -235,9 +266,9 @@ with right:
             )
             approve_col, reject_col = st.columns(2)
             with approve_col:
-                approve = st.button("Approve and execute", type="primary", use_container_width=True)
+                approve = st.button("Approve and execute", type="primary", width="stretch")
             with reject_col:
-                reject = st.button("Reject", use_container_width=True)
+                reject = st.button("Reject", width="stretch")
             if approve or reject:
                 try:
                     if approve:
@@ -264,7 +295,7 @@ with right:
         with st.expander(f"Decision history ({len(recent)})"):
             for item in recent:
                 st.markdown(
-                    f"{pill(item.status.value, STATUS_COLOUR.get(item.status.value, '#5f6368'))} "
+                    f"{pill(item.status.value, STATUS_COLOUR.get(item.status.value, SLATE))} "
                     f"<span style='font-size:.8rem;'>{escape(item.summary)}</span>",
                     unsafe_allow_html=True,
                 )
@@ -274,8 +305,8 @@ with right:
         st.markdown("<div class='panel-title'>Grounding check</div>", unsafe_allow_html=True)
         verdict = "GROUNDED" if report.get("grounded") else "NOT GROUNDED"
         st.markdown(
-            pill(verdict, "#0f9d58" if report.get("grounded") else "#d93025")
-            + f" <span style='font-size:.8rem;color:#5f6368;'>&nbsp;{escape(report.get('reason', ''))}</span>",
+            pill(verdict, HERB if report.get("grounded") else CHILLI)
+            + f" <span style='font-size:.8rem;color:#5B534C;'>&nbsp;{escape(report.get('reason', ''))}</span>",
             unsafe_allow_html=True,
         )
         meter("Citation validity", report.get("validity", 0.0), "Citations resolving to a document actually retrieved.")

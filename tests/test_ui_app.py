@@ -52,3 +52,11 @@ def test_a_command_waits_at_the_gate_until_approved(app, isolated_gate):
     assert not app.exception
     assert len(isolated_gate.dispatcher.dispatched) == 1
     assert isolated_gate.dispatcher.dispatched[0]["endpoint"] == "/pause_item"
+
+
+def test_a_retrieval_failure_is_shown_rather_than_hidden(app):
+    retrieval.set_retriever(FakeRetriever(error="NotFoundError"))
+    app.run()
+    app.chat_input[0].set_value("When are payouts issued?").run()
+    assert not app.exception
+    assert any("could not be searched" in block.value for block in app.warning)
