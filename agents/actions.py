@@ -198,7 +198,9 @@ register_action(
         description="Change published opening hours.",
         endpoint="/update_hours",
         risk=Risk.HIGH,
-        triggers=("update hours", "change hours", "set hours", "update opening hours"),
+        # Every phrasing _parse_hours accepts. "change opening hours" used to
+        # parse but never route, so it was answered as a question instead.
+        triggers=tuple(f"{verb} {opening}hours" for verb in ("update", "set", "change") for opening in ("", "opening ")),
         parser=_parse_hours,
         summary=lambda p: f"Change published opening hours: {p.get('details', '?')}.",
     )

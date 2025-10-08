@@ -40,6 +40,8 @@ class TestRouting:
             "pause 'Chicken Biryani'",
             "unpause the lamb dish",
             "update hours for Saturday",
+            "change opening hours to 10:00-22:00",
+            "set opening hours for Sunday",
         ],
     )
     def test_commands_route_to_action(self, query):
