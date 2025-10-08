@@ -1,0 +1,44 @@
+# Tooling configuration. Deliberately one file: a project with four config
+# files for four tools is a project where nobody runs any of them.
+
+[tool.ruff]
+line-length = 118
+target-version = "py311"
+exclude = [".venv", "project_venv", "data", "docs"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # import ordering
+    "B",    # bugbear: mutable defaults, shadowed loop vars, except-without-raise
+    "UP",   # pyupgrade
+    "C4",   # comprehension simplifications
+    "SIM",  # obvious simplifications
+    "RUF",  # ruff's own checks
+]
+ignore = [
+    # Long strings in prompts and user-facing copy read worse when wrapped.
+    "E501",
+    # `except Exception` is used deliberately at each boundary where a failure
+    # must degrade rather than propagate; every occurrence is logged or
+    # recorded on the state, and annotated with why.
+    "BLE001",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert on internals on purpose, and fakes shadow SDK names.
+"tests/*" = ["B011", "SIM117"]
+# The UI is a script: Streamlit executes it top to bottom, so module-level
+# statements after imports are the programming model, not a smell.
+"apps/ui/streamlit_app.py" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agents", "ingestion", "connectors", "eval"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+filterwarnings = [
+    "ignore::DeprecationWarning:starlette.*",
+]

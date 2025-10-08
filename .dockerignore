@@ -1,0 +1,41 @@
+# Build context hygiene. Without this the context includes both virtualenvs
+# and the Chroma index — hundreds of megabytes shipped to the daemon on every
+# build, and a stale index baked into the image.
+.git
+.gitignore
+.github
+
+# Virtualenvs
+.venv/
+project_venv/
+venv/
+ENV/
+
+# Python artefacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage*
+htmlcov/
+
+# Runtime data: the bootstrap container regenerates the PDFs and rebuilds the
+# index into a volume, so baking either into the image would only make it
+# larger and non-reproducible. The Dockerfile creates the directories it needs.
+data/
+
+# Local config and preview output
+.env
+.env.*
+!.env.example
+README.preview.html
+
+# Documentation images are not needed at runtime
+docs/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
