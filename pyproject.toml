@@ -34,7 +34,7 @@ ignore = [
 "apps/ui/streamlit_app.py" = ["E402"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["agents", "ingestion", "connectors", "eval"]
+known-first-party = ["agents", "apps", "ingestion", "connectors", "eval"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

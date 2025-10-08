@@ -19,8 +19,7 @@ holds its id.
 
 from __future__ import annotations
 
-import time
-from collections.abc import Iterator
+from html import escape
 
 import streamlit as st
 
@@ -29,10 +28,7 @@ from agents.actions import registry_rows
 from agents.approval import ApprovalError, ApprovalStatus, get_gate
 from agents.cost import breakdown
 from agents.graph import invoke_graph
-from agents.grounding import CITATION_RE
-
-REPLAY_CHUNK = 28
-REPLAY_DELAY = 0.008
+from apps.ui.components import highlight_citations, pill, replay, request_card, source_card
 
 RISK_COLOUR = {"low": "#0f9d58", "medium": "#e8a33d", "high": "#d93025"}
 STATUS_COLOUR = {
@@ -48,28 +44,12 @@ STATUS_COLOUR = {
 # --------------------------------------------------------------------------
 # Presentation helpers
 # --------------------------------------------------------------------------
-def replay(text: str, chunk_size: int = REPLAY_CHUNK, delay: float = REPLAY_DELAY) -> Iterator[str]:
-    """Reveal already-composed, already-critiqued text progressively."""
-    for start in range(0, len(text), chunk_size):
-        yield text[start : start + chunk_size]
-        if delay:
-            time.sleep(delay)
-
-
-def pill(text: str, colour: str) -> str:
-    return (
-        f"<span style='background:{colour}1f;color:{colour};border:1px solid {colour}55;"
-        f"border-radius:999px;padding:2px 10px;font-size:0.78rem;font-weight:600;"
-        f"white-space:nowrap;'>{text}</span>"
-    )
-
-
 def meter(label: str, value: float, caption: str = "") -> None:
     colour = "#0f9d58" if value >= 0.7 else "#e8a33d" if value >= 0.45 else "#d93025"
     st.markdown(
         f"<div style='margin-bottom:6px;'>"
         f"<div style='display:flex;justify-content:space-between;font-size:0.8rem;color:#5f6368;'>"
-        f"<span>{label}</span><span style='color:{colour};font-weight:600;'>{value:.0%}</span></div>"
+        f"<span>{escape(label)}</span><span style='color:{colour};font-weight:600;'>{value:.0%}</span></div>"
         f"<div style='background:#00000014;border-radius:999px;height:6px;overflow:hidden;'>"
         f"<div style='background:{colour};width:{max(0.0, min(1.0, value)) * 100:.1f}%;height:6px;'></div>"
         f"</div></div>",
@@ -77,18 +57,6 @@ def meter(label: str, value: float, caption: str = "") -> None:
     )
     if caption:
         st.caption(caption)
-
-
-def highlight_citations(text: str) -> str:
-    """Make ``[file pN]`` visually distinct from the prose around it."""
-    return CITATION_RE.sub(
-        lambda m: (
-            f"<span style='background:#1a73e81f;color:#1a73e8;border-radius:4px;"
-            f"padding:0 5px;font-size:0.85em;font-weight:600;white-space:nowrap;'>"
-            f"{m.group(1)} p{m.group(2)}</span>"
-        ),
-        text,
-    )
 
 
 # --------------------------------------------------------------------------
@@ -107,6 +75,10 @@ st.markdown(
       .src {border-left:3px solid #1a73e8; padding:4px 0 4px 10px; margin-bottom:10px;}
       .src-head {font-weight:600; font-size:.86rem;}
       .src-body {font-size:.82rem; color:#5f6368; line-height:1.45;}
+      .muted {color:#5f6368; font-size:.8rem; font-weight:400;}
+      .request-summary {font-size:.95rem; font-weight:600; margin-bottom:6px;}
+      .cite {background:#1a73e81f; color:#1a73e8; border-radius:4px; padding:0 5px;
+             font-size:.85em; font-weight:600; white-space:nowrap;}
       .log {font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.76rem;
             color:#3c4043; padding:3px 0;}
     </style>
@@ -142,8 +114,8 @@ with st.sidebar:
     for row in registry_rows():
         st.markdown(
             f"{pill(row['risk'], RISK_COLOUR.get(row['risk'], '#5f6368'))} "
-            f"**{row['action']}** &nbsp;<code>{row['endpoint']}</code><br>"
-            f"<span style='font-size:.78rem;color:#5f6368;'>{row['description']}</span>",
+            f"**{escape(row['action'])}** &nbsp;<code>{escape(row['endpoint'])}</code><br>"
+            f"<span style='font-size:.78rem;color:#5f6368;'>{escape(row['description'])}</span>",
             unsafe_allow_html=True,
         )
 
@@ -215,12 +187,7 @@ with left:
             similarity_text = f"{similarity:.0%} similar" if isinstance(similarity, int | float) else "n/a"
             badge = pill("cited", "#0f9d58") if source.lower() in cited else pill("retrieved", "#5f6368")
             body = (context.get("document") or "")[:340]
-            st.markdown(
-                f"<div class='src'><div class='src-head'>[{position}] {source} &nbsp;{badge} "
-                f"<span style='color:#5f6368;font-weight:400;font-size:.8rem;'>&nbsp;{similarity_text}</span></div>"
-                f"<div class='src-body'>{body}…</div></div>",
-                unsafe_allow_html=True,
-            )
+            st.markdown(source_card(position, source, badge, similarity_text, body), unsafe_allow_html=True)
 
 # ---- Approval gate, grounding, telemetry ----
 with right:
@@ -247,17 +214,17 @@ with right:
         else:
             destination = "Would have been sent to"
         st.markdown(
-            f"<div class='panel' style='border-color:{colour}66;'>"
-            f"<div style='display:flex;gap:8px;align-items:center;margin-bottom:10px;'>"
-            f"{pill(request.status.value.upper(), colour)}"
-            f"{pill(f'{request.risk.value} risk', RISK_COLOUR.get(request.risk.value, '#5f6368'))}"
-            f"<span style='color:#5f6368;font-size:.75rem;'>id {request.id}</span></div>"
-            f"<div style='font-size:.95rem;font-weight:600;margin-bottom:6px;'>{request.summary}</div>"
-            f"<div style='font-size:.8rem;color:#5f6368;'>"
-            f"Requested by <b>{request.requested_by}</b> from “{request.original_query}”.<br>"
-            f"{destination} <code>{request.spec.endpoint if request.spec else '—'}</code>, "
-            f"taken from the action registry — never from the query or the model."
-            f"</div></div>",
+            request_card(
+                status_pill=pill(request.status.value.upper(), colour),
+                risk_pill=pill(f"{request.risk.value} risk", RISK_COLOUR.get(request.risk.value, "#5f6368")),
+                request_id=request.id,
+                summary=request.summary,
+                requested_by=request.requested_by,
+                original_query=request.original_query,
+                destination=destination,
+                endpoint=request.spec.endpoint if request.spec else "—",
+                colour=colour,
+            ),
             unsafe_allow_html=True,
         )
 
@@ -298,7 +265,7 @@ with right:
             for item in recent:
                 st.markdown(
                     f"{pill(item.status.value, STATUS_COLOUR.get(item.status.value, '#5f6368'))} "
-                    f"<span style='font-size:.8rem;'>{item.summary}</span>",
+                    f"<span style='font-size:.8rem;'>{escape(item.summary)}</span>",
                     unsafe_allow_html=True,
                 )
 
@@ -308,7 +275,7 @@ with right:
         verdict = "GROUNDED" if report.get("grounded") else "NOT GROUNDED"
         st.markdown(
             pill(verdict, "#0f9d58" if report.get("grounded") else "#d93025")
-            + f" <span style='font-size:.8rem;color:#5f6368;'>&nbsp;{report.get('reason', '')}</span>",
+            + f" <span style='font-size:.8rem;color:#5f6368;'>&nbsp;{escape(report.get('reason', ''))}</span>",
             unsafe_allow_html=True,
         )
         meter("Citation validity", report.get("validity", 0.0), "Citations resolving to a document actually retrieved.")
@@ -342,7 +309,7 @@ with right:
                     # spaces, so a column aligned with str.ljust does not stay aligned.
                     st.markdown(
                         f"<div class='log' style='display:flex;justify-content:space-between;'>"
-                        f"<span>{row['part']}</span><span>{row['tokens']} tokens</span></div>",
+                        f"<span>{escape(row['part'])}</span><span>{row['tokens']} tokens</span></div>",
                         unsafe_allow_html=True,
                     )
 
@@ -350,4 +317,4 @@ with right:
     if result.get("log"):
         st.markdown("<div class='panel-title'>Decision log</div>", unsafe_allow_html=True)
         for step in result["log"]:
-            st.markdown(f"<div class='log'>{step}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='log'>{escape(step)}</div>", unsafe_allow_html=True)
