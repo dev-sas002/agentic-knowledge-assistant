@@ -16,8 +16,10 @@ rather than only "what happened".
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
+from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -36,6 +38,8 @@ AUDIT_FILE = DATA_DIR / "audit.log"
 # Read-modify-write on a single file from a threaded server: two approvals
 # arriving together would otherwise lose one of them.
 _state_lock = threading.Lock()
+
+logger = logging.getLogger(__name__)
 
 
 class ActionPayload(BaseModel):
@@ -61,10 +65,12 @@ class OpsState(BaseModel):
 
 def load_state() -> OpsState:
     if STATE_FILE.exists():
+        # A truncated or hand-edited file must not take the service down:
+        # JSON and validation errors are ValueErrors, a non-object is a TypeError.
         try:
             return OpsState(**json.loads(STATE_FILE.read_text()))
-        except Exception:
-            pass
+        except (OSError, ValueError, TypeError):
+            logger.warning("Ignoring unreadable ops state at %s", STATE_FILE, exc_info=True)
     return OpsState()
 
 
@@ -156,18 +162,21 @@ def get_state():
 def get_audit(limit: int = 100):
     """The audit trail, newest last.
 
-    Paginated because it grows without bound: an unbounded read of a log file
-    is fine on day one and a memory problem on day four hundred.
+    Paginated because it grows without bound, and read as a stream so that
+    only the last ``limit`` entries are ever held in memory.
     """
-    entries: list[dict[str, Any]] = []
+    limit = max(1, min(limit, 1000))
+    tail: deque[dict[str, Any]] = deque(maxlen=limit)
+    count = 0
     if AUDIT_FILE.exists():
         with AUDIT_FILE.open() as handle:
             for line in handle:
                 try:
-                    entries.append(json.loads(line))
+                    entry = json.loads(line)
                 except ValueError:
                     # A partially written final line is expected if the process
                     # was killed mid-append; skip it rather than 500.
                     continue
-    limit = max(1, min(limit, 1000))
-    return {"count": len(entries), "returned": len(entries[-limit:]), "entries": entries[-limit:]}
+                count += 1
+                tail.append(entry)
+    return {"count": count, "returned": len(tail), "entries": list(tail)}

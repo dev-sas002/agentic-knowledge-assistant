@@ -135,6 +135,11 @@ class TestStatePersistence:
         (tmp_path / "ops_state.json").write_text("{ this is not json")
         assert client.get("/state").json()["items"] == {}
 
+    @pytest.mark.parametrize("content", ['["not", "an", "object"]', '{"items": {"Soup": 3}}'])
+    def test_a_well_formed_but_wrong_state_file_falls_back(self, client, tmp_path, content):
+        (tmp_path / "ops_state.json").write_text(content)
+        assert client.get("/state").json()["items"] == {}
+
     def test_the_state_file_is_valid_json_after_a_write(self, client, tmp_path):
         client.post("/pause_item", json={"type": "pause_item", "operator": "a", "item": "Soup"})
         assert json.loads((tmp_path / "ops_state.json").read_text())["items"] == {"Soup": "paused"}
@@ -197,6 +202,13 @@ class TestAuditPagination:
         for index in range(5):
             client.post("/pause_item", json={"type": "pause_item", "operator": "a", "item": f"item-{index}"})
         assert client.get("/audit?limit=2").json()["entries"][-1]["item"] == "item-4"
+
+    def test_count_includes_entries_beyond_the_page(self, client):
+        for index in range(7):
+            client.post("/pause_item", json={"type": "pause_item", "operator": "a", "item": f"item-{index}"})
+        body = client.get("/audit?limit=3").json()
+        assert (body["count"], body["returned"]) == (7, 3)
+        assert [entry["item"] for entry in body["entries"]] == ["item-4", "item-5", "item-6"]
 
     def test_an_absurd_limit_is_clamped(self, client):
         client.post("/pause_item", json={"type": "pause_item", "operator": "a", "item": "x"})
