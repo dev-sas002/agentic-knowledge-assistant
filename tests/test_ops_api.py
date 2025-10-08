@@ -121,7 +121,8 @@ class TestAudit:
 
     def test_a_corrupt_audit_line_does_not_break_the_endpoint(self, client, tmp_path):
         client.post("/pause_item", json={"type": "pause_item", "operator": "a", "item": "Soup"})
-        (tmp_path / "audit.log").open("a").write("not json at all\n")
+        with (tmp_path / "audit.log").open("a") as handle:
+            handle.write("not json at all\n")
         assert client.get("/audit").status_code == 200
 
 
