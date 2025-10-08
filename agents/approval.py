@@ -310,27 +310,34 @@ class ApprovalGate:
         return request
 
     # -- reading ---------------------------------------------------------
+    # Reads take the lock too. Lazy expiry is a write: without the lock, a
+    # reader could see PENDING, lose the CPU to an approval that claims the
+    # request, then stamp EXPIRED over a dispatch already in flight.
     def get(self, request_id: str) -> ApprovalRequest | None:
         """Fetch a request, marking it expired if its TTL has passed."""
-        request = self.store.get(request_id)
-        if request is None:
-            return None
-        self._expire_if_due(request)
-        return request
+        with self._lock:
+            request = self.store.get(request_id)
+            if request is None:
+                return None
+            self._expire_if_due(request)
+            return request
 
     def pending(self) -> list[ApprovalRequest]:
-        requests = self.store.all()
-        for request in requests:
-            self._expire_if_due(request)
+        with self._lock:
+            requests = self.store.all()
+            for request in requests:
+                self._expire_if_due(request)
         return [r for r in requests if r.status is ApprovalStatus.PENDING]
 
     def recent(self, limit: int = 20) -> list[ApprovalRequest]:
-        requests = self.store.all()
-        for request in requests:
-            self._expire_if_due(request)
+        with self._lock:
+            requests = self.store.all()
+            for request in requests:
+                self._expire_if_due(request)
         return requests[:limit]
 
     def _expire_if_due(self, request: ApprovalRequest) -> None:
+        """Mark a lapsed PENDING request as EXPIRED. Called with the lock held."""
         if request.status is ApprovalStatus.PENDING and request.is_expired(self.clock()):
             request.status = ApprovalStatus.EXPIRED
             request.decided_at = self.clock()

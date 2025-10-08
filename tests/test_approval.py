@@ -210,6 +210,31 @@ class TestExpiry:
         clock.advance(600)
         assert request.seconds_remaining(clock()) == 0.0
 
+    @pytest.mark.parametrize("read", ["get", "pending", "recent"])
+    def test_lazy_expiry_waits_for_an_in_flight_decision(self, read):
+        # Expiring on read is a write. If a reader could run while approve()
+        # holds the lock, it could stamp EXPIRED over a claimed request.
+        clock = Clock()
+        gate = ApprovalGate(dispatcher=RecordingDispatcher(), ttl_seconds=60.0, clock=clock)
+        request = gate.submit(pause())
+        clock.advance(61)
+        finished = threading.Event()
+
+        args = (request.id,) if read == "get" else ()
+
+        def reader():
+            getattr(gate, read)(*args)
+            finished.set()
+
+        with gate._lock:
+            thread = threading.Thread(target=reader)
+            thread.start()
+            assert not finished.wait(0.1)
+            assert request.status is ApprovalStatus.PENDING
+        thread.join(2)
+        assert finished.is_set()
+        assert request.status is ApprovalStatus.EXPIRED
+
 
 class TestDispatchFailure:
     def test_a_failing_ops_api_is_recorded_not_swallowed(self):
