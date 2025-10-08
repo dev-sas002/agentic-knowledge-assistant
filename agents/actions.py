@@ -27,10 +27,10 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class Risk(str, Enum):
+class Risk(StrEnum):
     """How much a mistake costs. Rendered on the approval screen."""
 
     LOW = "low"

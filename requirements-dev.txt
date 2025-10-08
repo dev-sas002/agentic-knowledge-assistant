@@ -4,5 +4,5 @@
 # and sentence-transformers, and adding one line to it invalidates a
 # multi-gigabyte build layer. Tooling changes far more often than the model
 # stack does.
-pytest==8.3.3
-ruff==0.7.4
+pytest==9.2.0
+ruff==0.17.4

@@ -56,7 +56,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Protocol
 
 from agents import config
@@ -65,7 +65,7 @@ from agents.actions import ACTIONS, ActionSpec, ProposedAction, Risk
 logger = logging.getLogger(__name__)
 
 
-class ApprovalStatus(str, Enum):
+class ApprovalStatus(StrEnum):
     PENDING = "pending"
     #: Held briefly while the dispatch is in flight, so a second approval of
     #: the same request cannot start a second dispatch.

@@ -100,6 +100,21 @@ def clamp_top_k(value: Any, maximum: int | None = None) -> int:
     return max(1, min(wanted, maximum))
 
 
+def persistent_client(path: str | Path) -> Any:
+    """A Chroma client on disk, with Chroma's product telemetry switched off.
+
+    The index holds internal documents and the README promises a stack that
+    runs offline; neither fits a library that reports usage events home by
+    default. Shared by the retriever and the indexer.
+    """
+    # Imported lazily: chromadb is a heavy dependency, and merely importing
+    # the routing and action logic must not require it.
+    import chromadb
+    from chromadb.config import Settings
+
+    return chromadb.PersistentClient(path=str(Path(path)), settings=Settings(anonymized_telemetry=False))
+
+
 def _first_row(result: dict, key: str) -> list:
     """Chroma returns ``{key: [[...]]}``, or None when a field was not included."""
     rows = result.get(key) or []
@@ -130,11 +145,7 @@ class ChromaRetriever:
     @property
     def collection(self) -> Any:
         if self._collection is None:
-            # Imported lazily: chromadb is a heavy dependency, and merely
-            # importing the routing and action logic must not require it.
-            import chromadb
-
-            client = chromadb.PersistentClient(path=str(Path(config.CHROMA_DB_DIR)))
+            client = persistent_client(config.CHROMA_DB_DIR)
             self._collection = client.get_or_create_collection(config.CHROMA_COLLECTION)
         return self._collection
 

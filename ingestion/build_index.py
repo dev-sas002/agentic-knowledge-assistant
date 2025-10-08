@@ -40,6 +40,7 @@ except ImportError:  # `python ingestion/build_index.py`
 from agents import config
 from agents.embedding_cache import build_embedding_cache, embed_cached
 from agents.providers import resolve_embedder
+from agents.retrieval import persistent_client
 
 
 def collect_chunks(pdf_paths: list[Path], chunk_size: int, overlap: int) -> tuple[list[dict], list[str]]:
@@ -67,7 +68,7 @@ def build_index(
     cache_path: str | None = None,
 ) -> int:
     """Index ``source_dir`` into ``persist_dir``. Returns the record count."""
-    import chromadb
+    from chromadb.errors import NotFoundError
 
     source_dir.mkdir(parents=True, exist_ok=True)
     persist_dir.mkdir(parents=True, exist_ok=True)
@@ -92,12 +93,12 @@ def build_index(
     cache = build_embedding_cache(config.EMBEDDING_CACHE_PATH if cache_path is None else cache_path)
 
     print(f"Initialising Chroma persistent client at {persist_dir}")
-    client = chromadb.PersistentClient(path=str(persist_dir))
+    client = persistent_client(persist_dir)
     if rebuild:
         try:
             client.delete_collection(collection_name)
             print(f"Deleted existing collection: {collection_name}")
-        except Exception:
+        except NotFoundError:
             pass
         collection = client.create_collection(collection_name)
     else:

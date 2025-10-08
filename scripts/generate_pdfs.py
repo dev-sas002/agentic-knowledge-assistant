@@ -22,7 +22,7 @@ def draw_wrapped_text(c: canvas.Canvas, text: str, x: int, y: int) -> int:
 def create_pdf(file_path: Path, title: str, sections: list[dict[str, str]]):
     file_path.parent.mkdir(parents=True, exist_ok=True)
     c = canvas.Canvas(str(file_path), pagesize=A4)
-    width, height = A4
+    _, height = A4
 
     y = height - MARGIN
     c.setFont("Helvetica-Bold", 18)
