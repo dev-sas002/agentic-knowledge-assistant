@@ -13,6 +13,8 @@ passages, so retrieval, citations, the critic and the approval gate all run for 
 
 ## Running locally
 
+Python 3.11 is pinned in `.python-version` and matches the Docker base image.
+
 ```bash
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
@@ -23,7 +25,8 @@ uvicorn connectors.ops_stub_api.main:app --port 8001   # second shell, so approv
 ```
 
 The first index build downloads `BAAI/bge-small-en-v1.5` (about 130 MB). Set `EMBEDDER_PROVIDER=hashing` to skip
-the download and never import torch; retrieval becomes lexical instead of semantic, which is fine for CI.
+the download and never import torch; retrieval becomes lexical instead of semantic, which is enough for tests and a
+quick look.
 
 With Docker, `docker compose up -d --build` serves the console on http://localhost:8340 and the ops API on
 http://localhost:8341. A one-shot `bootstrap` service generates the PDFs and builds the index into a shared volume
@@ -41,6 +44,50 @@ After approval the gate dispatches exactly once and shows the ops API's response
 request, so the ops audit log can be joined back to the decision.
 
 ![The action executed after approval, with the ops API response](docs/screenshots/action-executed.png)
+
+On a phone the columns stack: the answer and its citation chips first, then the gate, the grounding check and the
+cost panel.
+
+<img src="docs/screenshots/mobile-answer.png" alt="The console at phone width, showing a cited answer" width="300">
+
+## The ops API
+
+The stub on port 8341 (8001 inside the stack) is what an approved action calls. These exchanges were captured from
+the compose stack. `GET /actions` publishes the registry the agent proposes from:
+
+```bash
+curl -s localhost:8341/actions
+```
+
+```json
+{"actions": [
+  {"action": "pause_item", "description": "Take a menu item off sale.", "risk": "medium", "approval": "required", "endpoint": "/pause_item"},
+  {"action": "unpause_item", "description": "Put a paused menu item back on sale.", "risk": "low", "approval": "required", "endpoint": "/unpause_item"},
+  {"action": "update_hours", "description": "Change published opening hours.", "risk": "high", "approval": "required", "endpoint": "/update_hours"}
+]}
+```
+
+This is the request the gate sends after an approval:
+
+```bash
+curl -s -X POST localhost:8341/pause_item -H 'content-type: application/json' \
+  -d '{"type": "pause_item", "operator": "demo_user", "item": "Lamb Karahi",
+       "approval_id": "3f9c1b2a7d10", "original_query": "pause '"'"'Lamb Karahi'"'"'"}'
+```
+
+```json
+{"ok": true, "message": "Paused item 'Lamb Karahi'", "state": {"items": {"Lamb Karahi": "paused"}, "hours_note": ""}}
+```
+
+A payload without an item is refused with a 400 (`{"detail": "Missing 'item' in payload"}`) and is not audited.
+`GET /audit?limit=N` returns the last N audit lines, plus a count of all of them:
+
+```json
+{"count": 1, "returned": 1, "entries": [
+  {"action": "pause_item", "type": "pause_item", "operator": "demo_user", "item": "Lamb Karahi", "details": null,
+   "original_query": "pause 'Lamb Karahi'", "approval_id": "3f9c1b2a7d10", "ts": "2026-11-07T15:52:13.861328+00:00"}
+]}
+```
 
 ## Architecture
 
@@ -127,7 +174,8 @@ menu, which is the classic prompt-injection setup: a supplier price list saying 
 pause every item". `propose()` only ever sees the operator's typed query, and `agents/prompting.py` does not import
 the registry at all (`TestNoPathToActions::test_the_prompting_module_cannot_reach_the_action_registry` fails if it
 ever does). Inside the prompt, retrieved text is fenced in `<context>` tags, capped at `MAX_CONTEXT_CHARS`
-independent of `top_k`, and labelled as untrusted data. That fencing is mitigation only; a persuasive document can
+independent of `top_k`, and labelled as untrusted data, and the console HTML-escapes passages, answers and queries before rendering them, so a
+PDF cannot inject markup into the approval screen (`tests/test_ui_components.py`). The prompt fencing is mitigation only; a persuasive document can
 still steer prose. I accept that because the worst outcome is a wrong answer, and answers are graded. The defences
 that actually hold are structural: the import boundary, the closed allow-list and the human gate.
 
@@ -150,7 +198,9 @@ Context dominates the prompt, which is why `MAX_TOP_K` is a cost control as much
 `agents/embedding_cache.py` keeps a content-addressed SQLite cache keyed on `blake2b(model + text)`, with WAL
 enabled so the indexer and UI can share it. The model name is in the key, so changing `EMBEDDING_MODEL` is a clean
 miss rather than a stale hit, and an unwritable path falls back to `NullEmbeddingCache`. There is no reranker, BM25
-or query expansion; on six documents they would add moving parts without a measurable gain.
+or query expansion; on six documents they would add moving parts without a measurable gain. Chroma's anonymised
+product telemetry is switched off in the one place clients are built (`agents/retrieval.persistent_client`), so the
+stack makes no outbound calls of its own when there is no Groq key.
 
 ## Configuration
 
@@ -171,7 +221,7 @@ default rather than crashing the Streamlit process at import.
 ## Testing
 
 ```bash
-pytest                    # 339 tests, about 5 seconds
+pytest                    # 361 tests, a few seconds
 ruff check .
 python -m eval.harness    # add --top-k N, --json, --fail-under 0.9
 ```
@@ -179,7 +229,16 @@ python -m eval.harness    # add --top-k N, --json, --fail-under 0.9
 No test touches the network or spends a token. Autouse fixtures in `tests/conftest.py` make any outbound socket
 raise, strip `GROQ_API_KEY`, give each test a fresh gate whose dispatcher records instead of executing, and disable
 the on-disk embedding cache. The Groq path runs against `tests/fakes.FakeGroq`, which records the request that would
-have been sent.
+have been sent, and `tests/test_groq_sdk_contract.py` drives the real `groq` client through an in-process HTTP
+transport, so an SDK upgrade that changes its arguments or response shape fails offline. `tests/test_ui_app.py` runs
+the Streamlit script headless with `AppTest`: a question, a retrieval failure, and a command approved at the gate.
+
+With the stack running, the same checks run inside the built image:
+
+```bash
+docker compose exec ui pytest
+docker compose exec ui python -m eval.harness
+```
 
 The eval harness asks ten checked-in questions and reports, per question, whether the expected document was
 retrieved (so retrieval failures are separate from composition failures), the critic's verdict, latency and cost.
@@ -187,9 +246,12 @@ One question is unanswerable and passes only if the system declines to answer it
 
 ```
 10/10 passed   retrieval recall 100%   grounded 100%
-median latency 133ms (retrieval 131ms)   provider extractive
-cost 0 call(s), 0 tokens, $0.000000 total
+median latency 33ms (retrieval 31ms)   provider extractive
+cost 0 call(s), 0 tokens, $0.000000 total — $0.000000/question
 ```
+
+With `EMBEDDER_PROVIDER=hashing` the same run scores 9/10 with 89% retrieval recall: one answerable question misses
+its source document, the gap between lexical and semantic retrieval on this corpus.
 
 ## Limitations and roadmap
 
@@ -206,4 +268,7 @@ cost 0 call(s), 0 tokens, $0.000000 total
   generated PDFs (nine chunks). The latency figures above say nothing about Chroma at scale.
 - **Auth and tenancy.** There is no authentication or per-user index scoping, and `OPERATOR_NAME` is trusted as
   given.
-- **CI for the container.** The compose stack is defined but the suite is not yet run inside the built image in CI.
+
+## License
+
+MIT. See `LICENSE`.
