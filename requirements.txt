@@ -1,0 +1,22 @@
+# Pinned explicitly, ahead of sentence-transformers, and pinned to a version
+# whose Linux wheels are CPU-only. Left to resolve on its own, recent torch
+# pulls ~3GB of CUDA runtime wheels on both x86_64 and aarch64 — for a model
+# that runs on CPU in every deployment this project has. That was most of a
+# 9.9GB image and most of the build time.
+torch==2.5.1
+
+chromadb==0.5.5
+sentence-transformers==2.7.0
+pypdf==4.3.1
+reportlab==4.2.5
+python-dotenv==1.0.1
+tqdm==4.66.5
+streamlit==1.38.0
+groq==0.11.0
+langgraph==0.2.39
+fastapi==0.115.6
+uvicorn==0.32.0
+pydantic==2.9.2
+requests==2.32.3
+typing_extensions==4.12.2
+httpx==0.27.2
