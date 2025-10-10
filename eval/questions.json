@@ -1,0 +1,66 @@
+{
+  "description": "A fixed question set over the six generated sample PDFs. Small, hand-written, and checked in on purpose: an eval set that changes when the system changes measures nothing.",
+  "questions": [
+    {
+      "id": "payout-schedule",
+      "query": "When are partner payments issued and how are statements summarised?",
+      "expect_sources": ["Finance_Processes_Guide.pdf"],
+      "expect_phrases": ["weekly", "Friday"]
+    },
+    {
+      "id": "invoice-resend",
+      "query": "What is the procedure for re-sending an invoice to a partner?",
+      "expect_sources": ["Finance_Processes_Guide.pdf"],
+      "expect_phrases": ["invoice", "billing period"]
+    },
+    {
+      "id": "reconciliation",
+      "query": "What causes reconciliation mismatches between order data and payouts?",
+      "expect_sources": ["Finance_Processes_Guide.pdf"],
+      "expect_phrases": ["fees", "refunds", "chargebacks"]
+    },
+    {
+      "id": "pause-policy",
+      "query": "What is the policy for pausing a menu item during a stock-out?",
+      "expect_sources": ["Menu_and_Operations_FAQ.pdf"],
+      "expect_phrases": ["paused", "stock-out"]
+    },
+    {
+      "id": "opening-hours",
+      "query": "How should opening hours be adjusted for holidays across third-party listings?",
+      "expect_sources": ["Menu_and_Operations_FAQ.pdf"],
+      "expect_phrases": ["hours", "listings"]
+    },
+    {
+      "id": "promotions",
+      "query": "What approval do price changes and promotions require?",
+      "expect_sources": ["Menu_and_Operations_FAQ.pdf"],
+      "expect_phrases": ["approval", "promotions"]
+    },
+    {
+      "id": "onboarding",
+      "query": "How does a new partner get started on the portal?",
+      "expect_sources": ["System_Onboarding_and_Usage.pdf"],
+      "expect_phrases": ["portal"]
+    },
+    {
+      "id": "reporting",
+      "query": "Which reports are available for insights and how are they used?",
+      "expect_sources": ["Reporting_and_Insights_Guide.pdf"],
+      "expect_phrases": ["report"]
+    },
+    {
+      "id": "ops-portal-tasks",
+      "query": "What tasks are carried out in the ops portal and Deliverect?",
+      "expect_sources": ["Ops_Portal_and_Deliverect_Tasks.pdf"],
+      "expect_phrases": ["ops"]
+    },
+    {
+      "id": "unanswerable",
+      "query": "What is the company's parental leave allowance in Portugal?",
+      "expect_sources": [],
+      "expect_phrases": [],
+      "expect_ungrounded": true
+    }
+  ]
+}
