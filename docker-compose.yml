@@ -1,0 +1,75 @@
+# One command, no manual steps:
+#
+#   docker compose up -d --build
+#
+# A bootstrap container generates the six sample PDFs and builds the Chroma
+# index into a shared volume, then exits; the UI waits for it to succeed, so
+# the app is never empty on first boot.
+#
+# No API key is required. Without GROQ_API_KEY the answer is composed
+# extractively from the retrieved text, with real citations.
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: pwb-ai-agent:local
+  environment: &env
+    CHROMA_DB_DIR: /data/chroma
+    RAW_DOCS_DIR: /data/raw
+    CHROMA_COLLECTION: ${CHROMA_COLLECTION:-pwb_docs}
+    EMBEDDING_MODEL: BAAI/bge-small-en-v1.5
+    EMBEDDER_PROVIDER: ${EMBEDDER_PROVIDER:-sentence-transformers}
+    # On the shared volume, so a rebuild after adding one PDF re-embeds only
+    # that PDF's chunks instead of the whole corpus.
+    EMBEDDING_CACHE_PATH: /data/embedding_cache.sqlite3
+    LLM_PROVIDER: ${LLM_PROVIDER:-auto}
+    GROQ_API_KEY: ${GROQ_API_KEY:-}
+    GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
+    OPS_API_URL: http://ops-api:8001
+    OPERATOR_NAME: ${OPERATOR_NAME:-demo_user}
+    APPROVAL_TTL_SECONDS: ${APPROVAL_TTL_SECONDS:-900}
+    # On the shared volume, so the ops state and audit log survive a restart
+    # instead of landing in the container's own filesystem.
+    OPS_DATA_DIR: /data
+  volumes:
+    - agent_data:/data
+
+services:
+  # Seeds the corpus and the index, then exits. Everything else waits for it.
+  bootstrap:
+    <<: *app
+    command: >
+      sh -c "python scripts/generate_pdfs.py &&
+             python -m ingestion.build_index"
+
+  ops-api:
+    <<: *app
+    container_name: pwb_ops_api
+    command: ["uvicorn", "connectors.ops_stub_api.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    ports: ["8341:8001"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8001/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  ui:
+    <<: *app
+    container_name: pwb_ui
+    ports: ["8340:8501"]
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+      ops-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8501/_stcore/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+volumes:
+  agent_data:
